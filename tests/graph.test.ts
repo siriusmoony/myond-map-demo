@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runGraph } from "@/lib/agent/graph";
 import { createModel, currentProvider, type StructuredModel } from "@/lib/agent/model";
 import { SAMPLE_MAP } from "@/lib/map/sample";
@@ -54,6 +54,16 @@ describe("agent graph", () => {
     expect(out.trace).toEqual(["START", "agent", "validate: NG（1件）", "agent", "validate: OK", "END"]);
   });
 
+  it("treats malformed JSON from the model as a validation error and retries", async () => {
+    const { model } = fakeModel([
+      { summary: "bad", operations: [{ ...addOp("t3", "plan"), kind: "task" }] }, // 想定外の種類名
+      { summary: "good", operations: [addOp("t3", "plan")] },
+    ]);
+    const out = await runGraph(model, { mode: "agent", map: SAMPLE_MAP, selectedId: null, instruction: "展開して" });
+    expect(out.kind).toBe("proposal");
+    expect(out.trace).toEqual(["START", "agent", "validate: NG（1件）", "agent", "validate: OK", "END"]);
+  });
+
   it("gives up after MAX_ATTEMPTS and returns the errors", async () => {
     const bad = { summary: "bad", operations: [addOp("a1", "thought")] };
     const { model, prompts } = fakeModel([bad, bad, bad]);
@@ -93,6 +103,42 @@ describe("model factory", () => {
 
     process.env.LLM_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-    expect(createModel().constructor.name).toBe("ChatAnthropic");
+    expect(typeof createModel().withStructuredOutput).toBe("function");
+  });
+
+  // 実際に Anthropic へ送られる HTTP リクエストの中身を検査する（通信は偽物に差し替え）。
+  // Sonnet 5 は既定で thinking が有効になり、強制 tool_choice と併用すると 400 になるため、
+  // tool_choice を送らず output_config.format（JSON Schema）で構造化出力していることを確かめる。
+  it("sends Claude a native JSON-schema request without forced tool_choice", async () => {
+    process.env.LLM_PROVIDER = "anthropic";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    const bodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      const message = {
+        id: "msg_test",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-5",
+        content: [{ type: "text", text: JSON.stringify({ answer: "まず1本書きましょう" }) }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 10 },
+      };
+      return new Response(JSON.stringify(message), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const out = await runGraph(createModel(), { mode: "ask", map: SAMPLE_MAP, selectedId: "a1", instruction: "何から？" });
+      expect(out).toMatchObject({ kind: "answer", answer: "まず1本書きましょう" });
+      const body = bodies[0];
+      expect(body.model).toBe("claude-sonnet-5");
+      expect(body.tool_choice).toBeUndefined();
+      expect(body.tools).toBeUndefined();
+      expect(body).not.toHaveProperty("temperature");
+      expect(body.output_config).toMatchObject({ effort: "medium", format: { type: "json_schema" } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

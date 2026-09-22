@@ -56,6 +56,17 @@ export function buildGraph(model: StructuredModel) {
   const proposer = model.withStructuredOutput(proposalSchema, { name: "propose_map_changes" });
   const answerer = model.withStructuredOutput(askResultSchema, { name: "answer_question" });
 
+  // 返ってきたJSONが形として壊れていた場合（想定外の種類名など）も、例外で落とさずに
+  // 検証エラーと同じ扱いにして差し戻しループに乗せる。一度の揺らぎでユーザーにエラーを見せないため。
+  const propose = async (prompt: [string, string][], s: State, node: "edit" | "agent") => {
+    const parsed = proposalSchema.safeParse(await proposer.invoke(prompt));
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map((i) => `出力の形式が不正です（${i.path.join(".")}: ${i.message}）`);
+      return { proposal: null, validationErrors: errors, attempts: s.attempts + 1, trace: node };
+    }
+    return { proposal: toOperations(parsed.data), attempts: s.attempts + 1, trace: node };
+  };
+
   const selectedNode = (s: State) => s.map.nodes.find((n) => n.id === s.selectedId) ?? null;
 
   const ask = async (s: State) => {
@@ -70,14 +81,12 @@ export function buildGraph(model: StructuredModel) {
     if (!selected)
       return { validationErrors: ["Editモードではノードを1つ選択してください"], attempts: MAX_ATTEMPTS, trace: "edit (未選択のため中止)" };
     const prompt = editPrompt(renderMap(s.map, s.selectedId), selected, s.instruction, s.validationErrors, s.proposal);
-    const raw = proposalSchema.parse(await proposer.invoke(prompt));
-    return { proposal: toOperations(raw), attempts: s.attempts + 1, trace: "edit" };
+    return propose(prompt, s, "edit");
   };
 
   const agent = async (s: State) => {
     const prompt = agentPrompt(renderMap(s.map, s.selectedId), s.instruction, s.validationErrors, s.proposal);
-    const raw = proposalSchema.parse(await proposer.invoke(prompt));
-    return { proposal: toOperations(raw), attempts: s.attempts + 1, trace: "agent" };
+    return propose(prompt, s, "agent");
   };
 
   // LLM を信用しきらず、プログラムでルールを確かめる番人。

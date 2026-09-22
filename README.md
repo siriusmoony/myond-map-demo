@@ -115,7 +115,7 @@ Without an API key the app runs in **Demo mode** (pre-recorded responses through
 - `/api/agent` is guarded twice: in `proxy.ts` and again in the route handler.
 - Passcode → HMAC-signed, `httpOnly`, `SameSite=Strict` cookie.
 - Per-session call limit (429 when exceeded); the counter is incremented **before** calling the LLM, so failing requests still count.
-- Input limits: instruction ≤ 500 chars, ≤ 60 nodes, ≤ 12 operations, `maxTokens` = 2000.
+- Input limits: instruction ≤ 500 chars, ≤ 60 nodes, ≤ 12 operations, `maxTokens` = 8000 (includes adaptive-thinking tokens), `effort: "medium"`.
 - Demo mode needs no passcode and no key.
 
 ## Limitations

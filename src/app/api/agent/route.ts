@@ -42,7 +42,10 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     // 詳細（プロバイダのエラー文など）はサーバーログにだけ残し、利用者には一般的な文言を返す
     console.error("[api/agent]", e);
-    const res = NextResponse.json({ error: "llm_error", message: "AIの呼び出しに失敗しました。少し待ってから再度お試しください", remaining }, { status: 502 });
+    // 原因の切り分け用に、プロバイダが返したHTTPステータスだけは画面に出す（本文やキーは出さない）
+    const status = typeof (e as { status?: unknown })?.status === "number" ? (e as { status: number }).status : null;
+    const message = `AIの呼び出しに失敗しました${status ? `（LLM ${status}）` : ""}。少し待ってから再度お試しください`;
+    const res = NextResponse.json({ error: "llm_error", message, remaining }, { status: 502 });
     res.cookies.set(SESSION_COOKIE, await signSession(updated), cookieOptions);
     return res;
   }
