@@ -6,7 +6,7 @@
 
 ![デモ：Ask → Edit → Agent → 差分プレビュー → 承認](./docs/demo.gif)
 
-> 🔗 デモURL: `https://<your-app>.vercel.app` — **デモモード** ならAPIキーなしで操作できます。本物のAIを使うには合言葉が必要です（応募文に記載）。
+> 🔗 デモURL: https://myond-map-demo.vercel.app — **デモモード** ならAPIキーなしで操作できます。本物のAIを使うには合言葉が必要です（応募文に記載）。
 
 ---
 

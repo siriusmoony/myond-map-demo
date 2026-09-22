@@ -6,7 +6,7 @@ A small working demo where an AI **proposes** edits to a mind map, the user **re
 
 ![Demo: Ask → Edit → Agent → diff preview → approve](./docs/demo.gif)
 
-> 🔗 Live demo: `https://<your-app>.vercel.app` — works without an API key in **Demo mode**. The real AI mode needs a passcode (shared in my application).
+> 🔗 Live demo: https://myond-map-demo.vercel.app — works without an API key in **Demo mode**. The real AI mode needs a passcode (shared in my application).
 
 ---
 
